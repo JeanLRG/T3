@@ -1,0 +1,161 @@
+#include <stdio.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <time.h>
+#include "telag2.h"
+
+cor_t fucsia = { 1, 0.2, 0.8, 1 };
+cor_t transparente = { 0, 0, 0, 0 };
+cor_t branco = { 1, 1, 1, 1 };
+cor_t vermelho = { 1, 0, 0, 1 };
+cor_t amarelo = { 0.1, 0.6, 0.6, 1 };
+cor_t azul = { 0, 0, 1, 1 };
+cor_t verde = { 0, 1, 0, 1 };
+
+// Função para gerar um número aleatório entre o mínimo e o máximo
+int aleatorio_entre(int min, int max) {
+    return min + rand() % (max - min + 1);
+}
+
+// Função que desenha o tabuleiro do Sudoku colorido e faz a mudança de cor entre as linhas quando separa estas em matrizes 3x3 
+void tabuleiro(int tam) {
+    int inicio_x = 100, inicio_y = 100;
+    int tamanho_celula = 50;
+
+    tela_texto((ponto_t){800, 100}, 10, vermelho, "DESISTIR");
+    for (int i = 0; i <= tam; i++) {
+        cor_t cor_linha = (i % 3 == 0) ? vermelho : azul;
+
+        tela_linha((ponto_t){inicio_x + i * tamanho_celula, inicio_y},
+                   (ponto_t){inicio_x + i * tamanho_celula, inicio_y + tam * tamanho_celula},
+                   (i % 3 == 0) ? 4 : 2, cor_linha);
+
+        tela_linha((ponto_t){inicio_x, inicio_y + i * tamanho_celula},
+                   (ponto_t){inicio_x + tam * tamanho_celula, inicio_y + i * tamanho_celula},
+                   (i % 3 == 0) ? 4 : 2, cor_linha);
+    }
+}
+
+// Função que desenha a tela inicial
+void desenha_tela_inicio() {
+    tela_retangulo((retangulo_t){{0, 0}, {800, 800}}, 0, transparente, transparente); // Limpa a tela
+    tela_texto((ponto_t){220, 200}, 100, verde, "SUDOKU");
+    tela_texto((ponto_t){350, 400}, 50, vermelho, "JOGAR");
+    tela_texto((ponto_t){350, 600}, 50, vermelho, "SAIR");
+    tela_retangulo((retangulo_t){{319, 354}, {210, 60}}, 4, vermelho, transparente); // Botão JOGAR
+    tela_retangulo((retangulo_t){{335, 550}, {150, 60}}, 4, vermelho, transparente); // Botão SAIR
+}
+
+// Função que verifica se um ponto está dentro de um retângulo
+bool verifica_clique(retangulo_t retangulo, ponto_t ponto) {
+    return (ponto.x >= retangulo.inicio.x && ponto.x <= retangulo.inicio.x + retangulo.tamanho.largura &&
+            ponto.y >= retangulo.inicio.y && ponto.y <= retangulo.inicio.y + retangulo.tamanho.altura);
+}
+
+// Função que desenha a tela de vitória
+void tela_ganhou() {
+    tela_retangulo((retangulo_t){{0, 0}, {800, 800}}, 0, transparente, transparente); // Limpa a tela
+    tela_texto((ponto_t){350, 200}, 50, verde, "PARABÉNS, VOCÊ GANHOU");
+    tela_texto((ponto_t){740, 740}, 10, vermelho, "SAIR");
+}
+
+// Função para verificar se um número está presente em uma linha
+bool verifica_linha(int tabuleiro[9][9], int linha, int num) {
+    for (int col = 0; col < 9; col++) {
+        if (tabuleiro[linha][col] == num) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Função para verificar se um número está presente em uma coluna
+bool verifica_coluna(int tabuleiro[9][9], int coluna, int num) {
+    for (int linha = 0; linha < 9; linha++) {
+        if (tabuleiro[linha][coluna] == num) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Função para verificar se um número está presente em uma subgrade 3x3
+bool verifica_subgrade(int tabuleiro[9][9], int inicio_linha, int inicio_coluna, int num) {
+    for (int linha = 0; linha < 3; linha++) {
+        for (int coluna = 0; coluna < 3; coluna++) {
+            if (tabuleiro[inicio_linha + linha][inicio_coluna + coluna] == num) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Função para verificar se o tabuleiro está correto
+bool verifica_tabuleiro(int tabuleiro[9][9]) {
+    for (int linha = 0; linha < 9; linha++) {
+        for (int coluna = 0; coluna < 9; coluna++) {
+            int num = tabuleiro[linha][coluna];
+            if (num == 0) continue; // Ignora células vazias
+
+            if (!(verifica_linha(tabuleiro, linha, num) && 
+                  verifica_coluna(tabuleiro, coluna, num) && 
+                  verifica_subgrade(tabuleiro, linha - linha % 3, coluna - coluna % 3, num))) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+void tela_sair() {
+    tela_fim();
+}
+
+int main() {
+    srand(time(NULL)); // Inicializa o gerador de números aleatórios com a semente do relógio
+    tela_inicio((tamanho_t){800, 800}, "SUDOKU");
+
+    int mat[9][9] = {0}; // Inicializa o tabuleiro com zeros
+    bool jogando = false;
+    bool mostrando_inicio = true; // Flag para saber se a tela inicial está visível
+
+    while (true) {
+        if (mostrando_inicio) {
+            desenha_tela_inicio(); // Desenha a tela inicial
+
+            rato_t rato = tela_rato(); // Obtém o estado do rato
+            if (rato.clicado[0]) {
+                ponto_t click = rato.posicao; // Obtém a posição do clique do rato
+
+                if (verifica_clique((retangulo_t){{319, 354}, {210, 60}}, click)) {
+                    mostrando_inicio = false; // Muda o estado para não mostrar mais a tela inicial
+                    jogando = true;
+                }
+                else if (verifica_clique((retangulo_t){{335, 550}, {150, 60}}, click)) {
+                    tela_sair(); // Encerra o programa
+                    return 0;
+                }
+            }
+        } 
+        else if (jogando) {
+            tabuleiro(9); // Desenha o tabuleiro do Sudoku
+
+            rato_t rato = tela_rato(); // Obtém o estado do rato
+            if (rato.clicado[0]) {
+              
+              //falta implementar a lógica para colocar os números
+
+                if (verifica_tabuleiro(mat)) {
+                    tela_ganhou();
+                    jogando = false;
+                }
+            }
+        }
+
+        tela_atualiza(); // Atualiza a tela continuamente
+    }
+
+    tela_fim(); // Encerra a tela
+    return 0;
+}
