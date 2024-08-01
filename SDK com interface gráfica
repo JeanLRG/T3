@@ -4,6 +4,7 @@
 #include <time.h>
 #include "telag2.h"
 
+// Definições de cores
 cor_t fucsia = { 1, 0.2, 0.8, 1 };
 cor_t transparente = { 0, 0, 0, 0 };
 cor_t branco = { 1, 1, 1, 1 };
@@ -12,17 +13,88 @@ cor_t amarelo = { 0.1, 0.6, 0.6, 1 };
 cor_t azul = { 0, 0, 1, 1 };
 cor_t verde = { 0, 1, 0, 1 };
 
+// Estrutura de dados para pontuação
+typedef struct {
+    char jogador[20];
+    int tabuleiro_id;
+    int pontos; 
+} pontuacao_t;
+
+typedef struct {
+    int id;
+    int dificuldade;
+    int matriz[9][9];
+    bool preenchido[9][9]; // Matriz para marcar células preenchidas
+} tabuleiro_t;
+
+tabuleiro_t tabuleiros[100];
+int num_tabuleiros = 0;
+int tabuleiro_atual = -1;
+clock_t tempo_inicio;
+
+// Função para carregar os tabuleiros a partir do arquivo
+void carregar_tabuleiros(const char *nome_arquivo) {
+    FILE *arquivo = fopen(nome_arquivo, "r");
+    if (!arquivo) {
+        printf("Erro ao abrir o arquivo de tabuleiros.\n");
+        return;
+    }
+
+    fscanf(arquivo, "%d", &num_tabuleiros);
+    for (int i = 0; i < num_tabuleiros; i++) {
+        fscanf(arquivo, "%d %d", &tabuleiros[i].id, &tabuleiros[i].dificuldade);
+        for (int j = 0; j < 9; j++) {
+            for (int k = 0; k < 9; k++) {
+                fscanf(arquivo, "%d", &tabuleiros[i].matriz[j][k]);
+                tabuleiros[i].preenchido[j][k] = (tabuleiros[i].matriz[j][k] != 0);
+            }
+        }
+    }
+    fclose(arquivo);
+}
+
 // Função para gerar um número aleatório entre o mínimo e o máximo
 int aleatorio_entre(int min, int max) {
     return min + rand() % (max - min + 1);
 }
 
+// Funções para ler e escrever pontuações
+void ler_pontuacoes(const char* arquivo, pontuacao_t** pontuacoes, int* num_pontuacoes) {
+    FILE* file = fopen(arquivo, "r");
+    if (file == NULL) {
+        *num_pontuacoes = 0;
+        *pontuacoes = NULL;
+        return;
+    }
+
+    fscanf(file, "%d", num_pontuacoes);
+    *pontuacoes = (pontuacao_t*)malloc(*num_pontuacoes * sizeof(pontuacao_t));
+    for (int i = 0; i < *num_pontuacoes; i++) {
+        fscanf(file, "%s %d %d", (*pontuacoes)[i].jogador, &(*pontuacoes)[i].tabuleiro_id, &(*pontuacoes)[i].pontos);
+    }
+    fclose(file);
+}
+
+void escrever_pontuacoes(const char* arquivo, pontuacao_t* pontuacoes, int num_pontuacoes) {
+    FILE* file = fopen(arquivo, "w");
+    if (file == NULL) {
+        perror("Erro ao abrir arquivo de pontuações");
+        exit(EXIT_FAILURE);
+    }
+
+    fprintf(file, "%d\n", num_pontuacoes);
+    for (int i = 0; i < num_pontuacoes; i++) {
+        fprintf(file, "%s %d %d\n", pontuacoes[i].jogador, pontuacoes[i].tabuleiro_id, pontuacoes[i].pontos);
+    }
+    fclose(file);
+}
+
 // Função que desenha o tabuleiro do Sudoku colorido e faz a mudança de cor entre as linhas quando separa estas em matrizes 3x3 
-void tabuleiro(int tam) {
+void tabuleiro(int tam, int tabuleiro[9][9]) {
     int inicio_x = 100, inicio_y = 100;
     int tamanho_celula = 50;
 
-    tela_texto((ponto_t){800, 100}, 10, vermelho, "DESISTIR");
+    tela_texto((ponto_t){600, 50}, 40, vermelho, "DESISTIR");
     for (int i = 0; i <= tam; i++) {
         cor_t cor_linha = (i % 3 == 0) ? vermelho : azul;
 
@@ -33,6 +105,17 @@ void tabuleiro(int tam) {
         tela_linha((ponto_t){inicio_x, inicio_y + i * tamanho_celula},
                    (ponto_t){inicio_x + tam * tamanho_celula, inicio_y + i * tamanho_celula},
                    (i % 3 == 0) ? 4 : 2, cor_linha);
+    }
+
+    // Desenha os números no tabuleiro
+    for (int i = 0; i < tam; i++) {
+        for (int j = 0; j < tam; j++) {
+            if (tabuleiro[i][j] != 0) {
+                char str[2];
+                snprintf(str, sizeof(str), "%d", tabuleiro[i][j]);
+                tela_texto((ponto_t){inicio_x + j * tamanho_celula + 15, inicio_y + i * tamanho_celula + 35}, 20, branco, str);
+            }
+        }
     }
 }
 
@@ -108,6 +191,15 @@ bool verifica_tabuleiro(int tabuleiro[9][9]) {
     return true;
 }
 
+// Função para calcular o tempo decorrido
+char* tempo_decorrido(clock_t inicio) {
+    static char buffer[20];
+    clock_t agora = clock();
+    double segundos = (double)(agora - inicio) / CLOCKS_PER_SEC;
+    snprintf(buffer, sizeof(buffer), "%.2f s", segundos);
+    return buffer;
+}
+
 void tela_sair() {
     tela_fim();
 }
@@ -119,6 +211,7 @@ int main() {
     int mat[9][9] = {0}; // Inicializa o tabuleiro com zeros
     bool jogando = false;
     bool mostrando_inicio = true; // Flag para saber se a tela inicial está visível
+    tempo_inicio = clock(); // Marca o início do jogo
 
     while (true) {
         if (mostrando_inicio) {
@@ -139,18 +232,30 @@ int main() {
             }
         } 
         else if (jogando) {
-            tabuleiro(9); // Desenha o tabuleiro do Sudoku
+            tabuleiro(9, mat); // Desenha o tabuleiro do Sudoku
 
             rato_t rato = tela_rato(); // Obtém o estado do rato
             if (rato.clicado[0]) {
-              
-              //falta implementar a lógica para colocar os números
+                ponto_t click = rato.posicao; // Obtém a posição do clique do rato
+
+                // Falta implementar a lógica para colocar números no tabuleiro
+                int linha = (click.y - 100) / 50; // Calcular a linha com base na posição do clique
+                int coluna = (click.x - 100) / 50; // Calcular a coluna com base na posição do clique
+
+                // Verificar se o clique está dentro do tabuleiro
+                if (linha >= 0 && linha < 9 && coluna >= 0 && coluna < 9) {
+                    int numero = aleatorio_entre(1, 9); // Gerar um número aleatório entre 1 e 9
+                    mat[linha][coluna] = numero; // Colocar o número no tabuleiro
+                }
 
                 if (verifica_tabuleiro(mat)) {
                     tela_ganhou();
                     jogando = false;
                 }
             }
+
+            // Desenhar o tempo decorrido
+            tela_texto((ponto_t){10, 10}, 20, branco, tempo_decorrido(tempo_inicio));
         }
 
         tela_atualiza(); // Atualiza a tela continuamente
